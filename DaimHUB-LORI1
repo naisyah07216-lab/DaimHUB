@@ -1,0 +1,1236 @@
+--[[
+    ██████╗  █████╗ ██╗███╗   ███╗██╗  ██╗██╗   ██╗██████╗ 
+    ██╔══██╗██╔══██╗██║████╗ ████║██║  ██║██║   ██║██╔══██╗
+    ██║  ██║███████║██║██╔████╔██║███████║██║   ██║██████╔╝
+    ██║  ██║██╔══██║██║██║╚██╔╝██║██╔══██║██║   ██║██╔══██╗
+    ██████╔╝██║  ██║██║██║ ╚═╝ ██║██║  ██║╚██████╔╝██████╔╝
+    ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ 
+              DaimHUB v2 // Lori's Nightmare
+              Architect: ZyD | Persona: Loy
+--]]
+
+--============================================================
+-- SERVICES
+--============================================================
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local CoreGui          = game:GetService("CoreGui")
+local SoundService     = game:GetService("SoundService")
+
+local LocalPlayer = Players.LocalPlayer
+
+--============================================================
+-- CONFIG
+--============================================================
+local CONFIG = {
+    Title         = "DaimHUB",
+    Subtitle      = "Lori's Nightmare // v2.0",
+    ValidKey      = "FREE-D1D1-DAIMHUBKEY",
+    AccentColor   = Color3.fromRGB(160, 80, 255),
+    BgColor       = Color3.fromRGB(12, 10, 20),
+    PanelColor    = Color3.fromRGB(24, 20, 38),
+    TextColor     = Color3.fromRGB(235, 230, 250),
+    MutedText     = Color3.fromRGB(150, 140, 170),
+    SuccessColor  = Color3.fromRGB(80, 220, 120),
+    ErrorColor    = Color3.fromRGB(255, 70, 70),
+    PortalColor   = Color3.fromRGB(60, 200, 255),
+    MaxFlySpeed   = 780,
+    MinFlySpeed   = 1,
+}
+
+--============================================================
+-- STATE
+--============================================================
+local State = {
+    Authenticated  = false,
+    -- Portal
+    PortalActive   = false,
+    PortalHighlights = {},
+    PortalConn     = nil,
+    -- Fly
+    FlyActive      = false,
+    FlySpeed       = 50,
+    FlyConn        = nil,
+    FlyBV          = nil,
+    FlyBG          = nil,
+    -- Anti-Ragdoll
+    AntiRagdoll    = false,
+    AntiRagConn    = nil,
+    -- Anti-Hit
+    AntiHit        = false,
+    AntiHitConn    = nil,
+    -- NoClip
+    NoClip         = false,
+    NoClipConn     = nil,
+}
+
+--============================================================
+-- GUI PARENT
+--============================================================
+local function getGuiParent()
+    if gethui then return gethui() end
+    if syn and syn.protect_gui then
+        local g = Instance.new("ScreenGui")
+        syn.protect_gui(g)
+        return g
+    end
+    return CoreGui
+end
+
+for _, v in pairs(getGuiParent():GetChildren()) do
+    if v.Name == "DaimHUB_GUI" then v:Destroy() end
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name           = "DaimHUB_GUI"
+ScreenGui.ResetOnSpawn   = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() ScreenGui.Parent = getGuiParent() end)
+if not ScreenGui.Parent then ScreenGui.Parent = CoreGui end
+
+--============================================================
+-- HELPERS
+--============================================================
+local function Corner(inst, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 8)
+    c.Parent = inst
+    return c
+end
+
+local function Stroke(inst, color, thick)
+    local s = Instance.new("UIStroke")
+    s.Color = color or CONFIG.AccentColor
+    s.Thickness = thick or 1.5
+    s.Parent = inst
+    return s
+end
+
+--============================================================
+-- ROOT
+--============================================================
+local Root = Instance.new("Frame")
+Root.Name = "Root"
+Root.Size = UDim2.fromScale(1, 1)
+Root.BackgroundColor3 = CONFIG.BgColor
+Root.BackgroundTransparency = 0.25
+Root.BorderSizePixel = 0
+Root.Parent = ScreenGui
+
+--============================================================
+-- LOGIN PAGE
+--============================================================
+local LoginPage = Instance.new("Frame")
+LoginPage.Size = UDim2.fromOffset(400, 260)
+LoginPage.Position = UDim2.new(0.5, -200, 0.5, -130)
+LoginPage.BackgroundColor3 = CONFIG.PanelColor
+LoginPage.BorderSizePixel = 0
+LoginPage.Parent = Root
+Corner(LoginPage, 12)
+Stroke(LoginPage, CONFIG.AccentColor, 2)
+
+local LoginTitle = Instance.new("TextLabel")
+LoginTitle.Size = UDim2.new(1, 0, 0, 40)
+LoginTitle.Position = UDim2.new(0, 0, 0, 15)
+LoginTitle.BackgroundTransparency = 1
+LoginTitle.Text = "DAIMHUB"
+LoginTitle.TextColor3 = CONFIG.AccentColor
+LoginTitle.Font = Enum.Font.GothamBold
+LoginTitle.TextSize = 26
+LoginTitle.Parent = LoginPage
+
+local LoginSub = Instance.new("TextLabel")
+LoginSub.Size = UDim2.new(1, 0, 0, 18)
+LoginSub.Position = UDim2.new(0, 0, 0, 52)
+LoginSub.BackgroundTransparency = 1
+LoginSub.Text = "Masukkan Key untuk Akses"
+LoginSub.TextColor3 = CONFIG.TextColor
+LoginSub.Font = Enum.Font.Gotham
+LoginSub.TextSize = 12
+LoginSub.TextTransparency = 0.3
+LoginSub.Parent = LoginPage
+
+local KeyBox = Instance.new("TextBox")
+KeyBox.Size = UDim2.new(1, -60, 0, 42)
+KeyBox.Position = UDim2.new(0, 30, 0, 90)
+KeyBox.BackgroundColor3 = CONFIG.BgColor
+KeyBox.BorderSizePixel = 0
+KeyBox.Text = ""
+KeyBox.PlaceholderText = "XXXX-XXXX-XXXXXXXX"
+KeyBox.TextColor3 = CONFIG.TextColor
+KeyBox.PlaceholderColor3 = Color3.fromRGB(120, 110, 140)
+KeyBox.Font = Enum.Font.GothamMedium
+KeyBox.TextSize = 14
+KeyBox.ClearTextOnFocus = false
+KeyBox.Parent = LoginPage
+Corner(KeyBox, 8)
+Stroke(KeyBox, Color3.fromRGB(60, 50, 80), 1)
+
+local ConfirmBtn = Instance.new("TextButton")
+ConfirmBtn.Size = UDim2.new(1, -60, 0, 40)
+ConfirmBtn.Position = UDim2.new(0, 30, 0, 145)
+ConfirmBtn.BackgroundColor3 = CONFIG.AccentColor
+ConfirmBtn.BorderSizePixel = 0
+ConfirmBtn.Text = "KONFIRMASI"
+ConfirmBtn.TextColor3 = Color3.new(1,1,1)
+ConfirmBtn.Font = Enum.Font.GothamBold
+ConfirmBtn.TextSize = 14
+ConfirmBtn.AutoButtonColor = false
+ConfirmBtn.Parent = LoginPage
+Corner(ConfirmBtn, 8)
+
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Size = UDim2.new(1, -60, 0, 22)
+StatusLbl.Position = UDim2.new(0, 30, 0, 195)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.Text = ""
+StatusLbl.TextColor3 = CONFIG.TextColor
+StatusLbl.Font = Enum.Font.Gotham
+StatusLbl.TextSize = 12
+StatusLbl.Parent = LoginPage
+
+--============================================================
+-- LOADING PAGE
+--============================================================
+local LoadingPage = Instance.new("Frame")
+LoadingPage.Size = UDim2.fromOffset(400, 200)
+LoadingPage.Position = UDim2.new(0.5, -200, 0.5, -100)
+LoadingPage.BackgroundColor3 = CONFIG.PanelColor
+LoadingPage.BorderSizePixel = 0
+LoadingPage.Visible = false
+LoadingPage.Parent = Root
+Corner(LoadingPage, 12)
+Stroke(LoadingPage, CONFIG.AccentColor, 2)
+
+local LoadTitle = Instance.new("TextLabel")
+LoadTitle.Size = UDim2.new(1, 0, 0, 30)
+LoadTitle.Position = UDim2.new(0, 0, 0, 30)
+LoadTitle.BackgroundTransparency = 1
+LoadTitle.Text = "LOADING..."
+LoadTitle.TextColor3 = CONFIG.AccentColor
+LoadTitle.Font = Enum.Font.GothamBold
+LoadTitle.TextSize = 18
+LoadTitle.Parent = LoadingPage
+
+local BarBg = Instance.new("Frame")
+BarBg.Size = UDim2.new(1, -80, 0, 14)
+BarBg.Position = UDim2.new(0, 40, 0, 95)
+BarBg.BackgroundColor3 = CONFIG.BgColor
+BarBg.BorderSizePixel = 0
+BarBg.Parent = LoadingPage
+Corner(BarBg, 7)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = CONFIG.AccentColor
+BarFill.BorderSizePixel = 0
+BarFill.Parent = BarBg
+Corner(BarFill, 7)
+
+local PercentLbl = Instance.new("TextLabel")
+PercentLbl.Size = UDim2.new(1, 0, 0, 24)
+PercentLbl.Position = UDim2.new(0, 0, 0, 125)
+PercentLbl.BackgroundTransparency = 1
+PercentLbl.Text = "0%"
+PercentLbl.TextColor3 = CONFIG.TextColor
+PercentLbl.Font = Enum.Font.GothamBold
+PercentLbl.TextSize = 16
+PercentLbl.Parent = LoadingPage
+
+local LoadStatus = Instance.new("TextLabel")
+LoadStatus.Size = UDim2.new(1, 0, 0, 18)
+LoadStatus.Position = UDim2.new(0, 0, 0, 155)
+LoadStatus.BackgroundTransparency = 1
+LoadStatus.Text = "Menghubungkan ke NEXORA..."
+LoadStatus.TextColor3 = CONFIG.MutedText
+LoadStatus.Font = Enum.Font.Gotham
+LoadStatus.TextSize = 11
+LoadStatus.Parent = LoadingPage
+
+--============================================================
+-- MAIN UI
+--============================================================
+local MainUI = Instance.new("Frame")
+MainUI.Size = UDim2.fromOffset(500, 360)
+MainUI.Position = UDim2.new(0.5, -250, 0.5, -180)
+MainUI.BackgroundColor3 = CONFIG.BgColor
+MainUI.BorderSizePixel = 0
+MainUI.Visible = false
+MainUI.Parent = Root
+Corner(MainUI, 12)
+Stroke(MainUI, CONFIG.AccentColor, 2)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 40)
+Header.BackgroundColor3 = CONFIG.PanelColor
+Header.BorderSizePixel = 0
+Header.Parent = MainUI
+Corner(Header, 12)
+
+local HeaderFix = Instance.new("Frame")
+HeaderFix.Size = UDim2.new(1, 0, 0, 10)
+HeaderFix.Position = UDim2.new(0, 0, 1, -10)
+HeaderFix.BackgroundColor3 = CONFIG.PanelColor
+HeaderFix.BorderSizePixel = 0
+HeaderFix.Parent = Header
+
+local MTitle = Instance.new("TextLabel")
+MTitle.Size = UDim2.new(1, -80, 1, 0)
+MTitle.Position = UDim2.new(0, 14, 0, 0)
+MTitle.BackgroundTransparency = 1
+MTitle.Text = "DaimHUB  •  " .. CONFIG.Subtitle
+MTitle.TextColor3 = CONFIG.TextColor
+MTitle.Font = Enum.Font.GothamBold
+MTitle.TextSize = 14
+MTitle.TextXAlignment = Enum.TextXAlignment.Left
+MTitle.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.fromOffset(28, 28)
+CloseBtn.Position = UDim2.new(1, -36, 0, 6)
+CloseBtn.BackgroundColor3 = CONFIG.ErrorColor
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = Header
+Corner(CloseBtn, 6)
+
+local ContentArea = Instance.new("Frame")
+ContentArea.Size = UDim2.new(1, -20, 1, -55)
+ContentArea.Position = UDim2.new(0, 10, 0, 45)
+ContentArea.BackgroundTransparency = 1
+ContentArea.Parent = MainUI
+
+--============================================================
+-- PAGE 1: PROFIL
+--============================================================
+local ProfilePage = Instance.new("Frame")
+ProfilePage.Size = UDim2.fromScale(1, 1)
+ProfilePage.BackgroundTransparency = 1
+ProfilePage.Parent = ContentArea
+
+local Avatar = Instance.new("ImageLabel")
+Avatar.Size = UDim2.fromOffset(80, 80)
+Avatar.Position = UDim2.new(0.5, -40, 0, 10)
+Avatar.BackgroundColor3 = CONFIG.PanelColor
+Avatar.BorderSizePixel = 0
+Avatar.Parent = ProfilePage
+Corner(Avatar, 40)
+Stroke(Avatar, CONFIG.AccentColor, 2)
+
+task.spawn(function()
+    local ok, thumb = pcall(function()
+        return Players:GetUserThumbnailAsync(LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+    end)
+    if ok and thumb then Avatar.Image = thumb end
+end)
+
+local NameLbl = Instance.new("TextLabel")
+NameLbl.Size = UDim2.new(1, 0, 0, 28)
+NameLbl.Position = UDim2.new(0, 0, 0, 100)
+NameLbl.BackgroundTransparency = 1
+NameLbl.Text = LocalPlayer.Name
+NameLbl.TextColor3 = CONFIG.TextColor
+NameLbl.Font = Enum.Font.GothamBold
+NameLbl.TextSize = 18
+NameLbl.Parent = ProfilePage
+
+local StatusRow = Instance.new("Frame")
+StatusRow.Size = UDim2.fromOffset(140, 24)
+StatusRow.Position = UDim2.new(0.5, -70, 0, 132)
+StatusRow.BackgroundColor3 = CONFIG.PanelColor
+StatusRow.BorderSizePixel = 0
+StatusRow.Parent = ProfilePage
+Corner(StatusRow, 12)
+
+local Dot = Instance.new("Frame")
+Dot.Size = UDim2.fromOffset(10, 10)
+Dot.Position = UDim2.new(0, 12, 0.5, -5)
+Dot.BackgroundColor3 = CONFIG.SuccessColor
+Dot.BorderSizePixel = 0
+Dot.Parent = StatusRow
+Corner(Dot, 5)
+
+local StatusTxt = Instance.new("TextLabel")
+StatusTxt.Size = UDim2.new(1, -32, 1, 0)
+StatusTxt.Position = UDim2.new(0, 26, 0, 0)
+StatusTxt.BackgroundTransparency = 1
+StatusTxt.Text = "Online"
+StatusTxt.TextColor3 = CONFIG.TextColor
+StatusTxt.Font = Enum.Font.GothamMedium
+StatusTxt.TextSize = 12
+StatusTxt.TextXAlignment = Enum.TextXAlignment.Left
+StatusTxt.Parent = StatusRow
+
+task.spawn(function()
+    while Dot.Parent do
+        TweenService:Create(Dot, TweenInfo.new(1), {BackgroundTransparency = 0.7}):Play()
+        task.wait(1)
+        TweenService:Create(Dot, TweenInfo.new(1), {BackgroundTransparency = 0}):Play()
+        task.wait(1)
+    end
+end)
+
+local CheatBtn = Instance.new("TextButton")
+CheatBtn.Size = UDim2.new(0, 200, 0, 46)
+CheatBtn.Position = UDim2.new(0.5, -100, 0, 180)
+CheatBtn.BackgroundColor3 = CONFIG.AccentColor
+CheatBtn.BorderSizePixel = 0
+CheatBtn.Text = "⚡  CHEAT"
+CheatBtn.TextColor3 = Color3.new(1,1,1)
+CheatBtn.Font = Enum.Font.GothamBold
+CheatBtn.TextSize = 15
+CheatBtn.AutoButtonColor = false
+CheatBtn.Parent = ProfilePage
+Corner(CheatBtn, 10)
+
+--============================================================
+-- PAGE 2: CHEAT (ScrollingFrame biar gak kepotong)
+--============================================================
+local CheatPage = Instance.new("ScrollingFrame")
+CheatPage.Size = UDim2.fromScale(1, 1)
+CheatPage.BackgroundTransparency = 1
+CheatPage.BorderSizePixel = 0
+CheatPage.ScrollBarThickness = 3
+CheatPage.ScrollBarImageColor3 = CONFIG.AccentColor
+CheatPage.CanvasSize = UDim2.new(0, 0, 0, 0)
+CheatPage.AutomaticCanvasSize = Enum.AutomaticSize.Y
+CheatPage.Visible = false
+CheatPage.Parent = ContentArea
+
+local CheatLayout = Instance.new("UIListLayout")
+CheatLayout.Padding = UDim.new(0, 6)
+CheatLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CheatLayout.Parent = CheatPage
+
+local CheatPad = Instance.new("UIPadding")
+CheatPad.PaddingBottom = UDim.new(0, 10)
+CheatPad.Parent = CheatPage
+
+-- Back button
+local BackBtn = Instance.new("TextButton")
+BackBtn.Size = UDim2.fromOffset(60, 28)
+BackBtn.BackgroundColor3 = CONFIG.PanelColor
+BackBtn.BorderSizePixel = 0
+BackBtn.Text = "‹ Back"
+BackBtn.TextColor3 = CONFIG.TextColor
+BackBtn.Font = Enum.Font.GothamMedium
+BackBtn.TextSize = 12
+BackBtn.LayoutOrder = 0
+BackBtn.Parent = CheatPage
+Corner(BackBtn, 6)
+
+-- Title
+local CheatTitle = Instance.new("TextLabel")
+CheatTitle.Size = UDim2.new(1, 0, 0, 22)
+CheatTitle.BackgroundTransparency = 1
+CheatTitle.Text = "» CHEAT MENU"
+CheatTitle.TextColor3 = CONFIG.AccentColor
+CheatTitle.Font = Enum.Font.GothamBold
+CheatTitle.TextSize = 12
+CheatTitle.TextXAlignment = Enum.TextXAlignment.Left
+CheatTitle.LayoutOrder = 1
+CheatTitle.Parent = CheatPage
+
+--============================================================
+-- UI HELPER: Toggle Row
+--============================================================
+local function MakeToggleRow(order, title, desc, onToggle)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -6, 0, 50)
+    row.BackgroundColor3 = CONFIG.PanelColor
+    row.BorderSizePixel = 0
+    row.LayoutOrder = order
+    row.Parent = CheatPage
+    Corner(row, 8)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -80, 0, 20)
+    lbl.Position = UDim2.new(0, 14, 0, 8)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = CONFIG.TextColor
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local dsc = Instance.new("TextLabel")
+    dsc.Size = UDim2.new(1, -80, 0, 14)
+    dsc.Position = UDim2.new(0, 14, 0, 28)
+    dsc.BackgroundTransparency = 1
+    dsc.Text = desc
+    dsc.TextColor3 = CONFIG.MutedText
+    dsc.Font = Enum.Font.Gotham
+    dsc.TextSize = 10
+    dsc.TextXAlignment = Enum.TextXAlignment.Left
+    dsc.Parent = row
+
+    local toggle = Instance.new("Frame")
+    toggle.Size = UDim2.fromOffset(46, 24)
+    toggle.Position = UDim2.new(1, -60, 0.5, -12)
+    toggle.BackgroundColor3 = Color3.fromRGB(50, 45, 65)
+    toggle.BorderSizePixel = 0
+    toggle.Parent = row
+    Corner(toggle, 12)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(18, 18)
+    knob.Position = UDim2.new(0, 3, 0.5, -9)
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+    knob.BorderSizePixel = 0
+    knob.Parent = toggle
+    Corner(knob, 9)
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(1, 1)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = row
+
+    local state = false
+    local function setVisual(on)
+        state = on
+        TweenService:Create(toggle, TweenInfo.new(0.2), {
+            BackgroundColor3 = on and CONFIG.AccentColor or Color3.fromRGB(50, 45, 65)
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {
+            Position = on and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+        }):Play()
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        setVisual(not state)
+        if onToggle then onToggle(state) end
+    end)
+
+    return row, setVisual
+end
+
+--============================================================
+-- TOGGLE 1: USP PORTAL TV
+--============================================================
+local TV_KW = {"tv", "television", "monitor", "screen", "repair", "generator"}
+
+local function nameMatch(name, kws)
+    local n = name:lower()
+    for _, k in ipairs(kws) do
+        if n:find(k) then return true end
+    end
+    return false
+end
+
+local function applyPortal(obj)
+    if not State.PortalHighlights[obj] then
+        local h = Instance.new("Highlight")
+        h.Name = "DaimHUB_Portal"
+        h.Adornee = obj
+        h.FillColor = CONFIG.PortalColor
+        h.OutlineColor = CONFIG.PortalColor
+        h.FillTransparency = 0.3
+        h.OutlineTransparency = 0.2
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = ScreenGui
+        State.PortalHighlights[obj] = h
+    end
+    for _, d in ipairs(obj:GetDescendants()) do
+        if d:IsA("BasePart") then
+            d.LocalTransparencyModifier = 0.5
+        end
+    end
+end
+
+local function clearPortal()
+    for obj, h in pairs(State.PortalHighlights) do
+        pcall(function() h:Destroy() end)
+    end
+    State.PortalHighlights = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if (obj:IsA("Model") or obj:IsA("BasePart")) and nameMatch(obj.Name, TV_KW) then
+            if obj:IsA("BasePart") then obj.LocalTransparencyModifier = 0 end
+            for _, d in ipairs(obj:GetDescendants()) do
+                if d:IsA("BasePart") then d.LocalTransparencyModifier = 0 end
+            end
+        end
+    end
+end
+
+local function portalLoop()
+    if not State.PortalActive then return end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if (obj:IsA("Model") or obj:IsA("BasePart")) and nameMatch(obj.Name, TV_KW) then
+            applyPortal(obj)
+        end
+    end
+    for obj, h in pairs(State.PortalHighlights) do
+        if not obj.Parent then
+            pcall(function() h:Destroy() end)
+            State.PortalHighlights[obj] = nil
+        end
+    end
+end
+
+local function setPortal(on)
+    State.PortalActive = on
+    if on then
+        if not State.PortalConn then
+            State.PortalConn = RunService.Heartbeat:Connect(portalLoop)
+        end
+    else
+        if State.PortalConn then
+            State.PortalConn:Disconnect()
+            State.PortalConn = nil
+        end
+        clearPortal()
+    end
+end
+
+MakeToggleRow(2, "🌀  USP PORTAL TV", "TV tembus pandang dari jauh", setPortal)
+
+--============================================================
+-- SCREEN FLY BUTTON (buka panel)
+--============================================================
+local FlyRow = Instance.new("Frame")
+FlyRow.Size = UDim2.new(1, -6, 0, 50)
+FlyRow.BackgroundColor3 = CONFIG.PanelColor
+FlyRow.BorderSizePixel = 0
+FlyRow.LayoutOrder = 3
+FlyRow.Parent = CheatPage
+Corner(FlyRow, 8)
+
+local FlyLbl = Instance.new("TextLabel")
+FlyLbl.Size = UDim2.new(1, -80, 0, 20)
+FlyLbl.Position = UDim2.new(0, 14, 0, 8)
+FlyLbl.BackgroundTransparency = 1
+FlyLbl.Text = "✈  SCREEN FLY"
+FlyLbl.TextColor3 = CONFIG.TextColor
+FlyLbl.Font = Enum.Font.GothamBold
+FlyLbl.TextSize = 13
+FlyLbl.TextXAlignment = Enum.TextXAlignment.Left
+FlyLbl.Parent = FlyRow
+
+local FlyDsc = Instance.new("TextLabel")
+FlyDsc.Size = UDim2.new(1, -80, 0, 14)
+FlyDsc.Position = UDim2.new(0, 14, 0, 28)
+FlyDsc.BackgroundTransparency = 1
+FlyDsc.Text = "Buka panel kontrol fly"
+FlyDsc.TextColor3 = CONFIG.MutedText
+FlyDsc.Font = Enum.Font.Gotham
+FlyDsc.TextSize = 10
+FlyDsc.TextXAlignment = Enum.TextXAlignment.Left
+FlyDsc.Parent = FlyRow
+
+local FlyArrow = Instance.new("TextLabel")
+FlyArrow.Size = UDim2.fromOffset(24, 24)
+FlyArrow.Position = UDim2.new(1, -36, 0.5, -12)
+FlyArrow.BackgroundTransparency = 1
+FlyArrow.Text = "›"
+FlyArrow.TextColor3 = CONFIG.AccentColor
+FlyArrow.Font = Enum.Font.GothamBold
+FlyArrow.TextSize = 22
+FlyArrow.Parent = FlyRow
+
+local FlyOpenBtn = Instance.new("TextButton")
+FlyOpenBtn.Size = UDim2.fromScale(1, 1)
+FlyOpenBtn.BackgroundTransparency = 1
+FlyOpenBtn.Text = ""
+FlyOpenBtn.Parent = FlyRow
+
+--============================================================
+-- FLY PANEL (floating terpisah)
+--============================================================
+local FlyPanel = Instance.new("Frame")
+FlyPanel.Name = "FlyPanel"
+FlyPanel.Size = UDim2.fromOffset(260, 200)
+FlyPanel.Position = UDim2.new(0.5, -130, 0.5, -100)
+FlyPanel.BackgroundColor3 = CONFIG.BgColor
+FlyPanel.BorderSizePixel = 0
+FlyPanel.Visible = false
+FlyPanel.ZIndex = 20
+FlyPanel.Parent = ScreenGui
+Corner(FlyPanel, 10)
+Stroke(FlyPanel, CONFIG.AccentColor, 1.5)
+
+local FlyHeader = Instance.new("Frame")
+FlyHeader.Size = UDim2.new(1, 0, 0, 30)
+FlyHeader.BackgroundColor3 = CONFIG.PanelColor
+FlyHeader.BorderSizePixel = 0
+FlyHeader.Parent = FlyPanel
+Corner(FlyHeader, 10)
+
+local FlyHeaderFix = Instance.new("Frame")
+FlyHeaderFix.Size = UDim2.new(1, 0, 0, 8)
+FlyHeaderFix.Position = UDim2.new(0, 0, 1, -8)
+FlyHeaderFix.BackgroundColor3 = CONFIG.PanelColor
+FlyHeaderFix.BorderSizePixel = 0
+FlyHeaderFix.Parent = FlyHeader
+
+local FlyTitle = Instance.new("TextLabel")
+FlyTitle.Size = UDim2.new(1, -40, 1, 0)
+FlyTitle.Position = UDim2.new(0, 12, 0, 0)
+FlyTitle.BackgroundTransparency = 1
+FlyTitle.Text = "✈  SCREEN FLY"
+FlyTitle.TextColor3 = CONFIG.TextColor
+FlyTitle.Font = Enum.Font.GothamBold
+FlyTitle.TextSize = 12
+FlyTitle.TextXAlignment = Enum.TextXAlignment.Left
+FlyTitle.Parent = FlyHeader
+
+local FlyClose = Instance.new("TextButton")
+FlyClose.Size = UDim2.fromOffset(20, 20)
+FlyClose.Position = UDim2.new(1, -26, 0, 5)
+FlyClose.BackgroundColor3 = CONFIG.ErrorColor
+FlyClose.Text = "×"
+FlyClose.TextColor3 = Color3.new(1,1,1)
+FlyClose.Font = Enum.Font.GothamBold
+FlyClose.TextSize = 14
+FlyClose.BorderSizePixel = 0
+FlyClose.Parent = FlyHeader
+Corner(FlyClose, 4)
+
+-- Fly toggle
+local FlyToggleRow = Instance.new("Frame")
+FlyToggleRow.Size = UDim2.new(1, -20, 0, 36)
+FlyToggleRow.Position = UDim2.new(0, 10, 0, 42)
+FlyToggleRow.BackgroundColor3 = CONFIG.PanelColor
+FlyToggleRow.BorderSizePixel = 0
+FlyToggleRow.Parent = FlyPanel
+Corner(FlyToggleRow, 6)
+
+local FlyToggleLbl = Instance.new("TextLabel")
+FlyToggleLbl.Size = UDim2.new(1, -70, 1, 0)
+FlyToggleLbl.Position = UDim2.new(0, 12, 0, 0)
+FlyToggleLbl.BackgroundTransparency = 1
+FlyToggleLbl.Text = "FLY"
+FlyToggleLbl.TextColor3 = CONFIG.TextColor
+FlyToggleLbl.Font = Enum.Font.GothamBold
+FlyToggleLbl.TextSize = 13
+FlyToggleLbl.TextXAlignment = Enum.TextXAlignment.Left
+FlyToggleLbl.Parent = FlyToggleRow
+
+local FlyToggle = Instance.new("Frame")
+FlyToggle.Size = UDim2.fromOffset(42, 22)
+FlyToggle.Position = UDim2.new(1, -54, 0.5, -11)
+FlyToggle.BackgroundColor3 = Color3.fromRGB(50, 45, 65)
+FlyToggle.BorderSizePixel = 0
+FlyToggle.Parent = FlyToggleRow
+Corner(FlyToggle, 11)
+
+local FlyKnob = Instance.new("Frame")
+FlyKnob.Size = UDim2.fromOffset(16, 16)
+FlyKnob.Position = UDim2.new(0, 3, 0.5, -8)
+FlyKnob.BackgroundColor3 = Color3.new(1,1,1)
+FlyKnob.BorderSizePixel = 0
+FlyKnob.Parent = FlyToggle
+Corner(FlyKnob, 8)
+
+local FlyToggleBtn = Instance.new("TextButton")
+FlyToggleBtn.Size = UDim2.fromScale(1, 1)
+FlyToggleBtn.BackgroundTransparency = 1
+FlyToggleBtn.Text = ""
+FlyToggleBtn.Parent = FlyToggleRow
+
+-- Speed slider
+local SpeedTitle = Instance.new("TextLabel")
+SpeedTitle.Size = UDim2.new(1, -20, 0, 18)
+SpeedTitle.Position = UDim2.new(0, 10, 0, 86)
+SpeedTitle.BackgroundTransparency = 1
+SpeedTitle.Text = "KECEPATAN: 50"
+SpeedTitle.TextColor3 = CONFIG.TextColor
+SpeedTitle.Font = Enum.Font.GothamMedium
+SpeedTitle.TextSize = 11
+SpeedTitle.TextXAlignment = Enum.TextXAlignment.Left
+SpeedTitle.Parent = FlyPanel
+
+local SpeedBarBg = Instance.new("Frame")
+SpeedBarBg.Size = UDim2.new(1, -20, 0, 10)
+SpeedBarBg.Position = UDim2.new(0, 10, 0, 108)
+SpeedBarBg.BackgroundColor3 = CONFIG.PanelColor
+SpeedBarBg.BorderSizePixel = 0
+SpeedBarBg.Parent = FlyPanel
+Corner(SpeedBarBg, 5)
+
+local SpeedBarFill = Instance.new("Frame")
+SpeedBarFill.Size = UDim2.new(50/CONFIG.MaxFlySpeed, 0, 1, 0)
+SpeedBarFill.BackgroundColor3 = CONFIG.AccentColor
+SpeedBarFill.BorderSizePixel = 0
+SpeedBarFill.Parent = SpeedBarBg
+Corner(SpeedBarFill, 5)
+
+local SpeedBarBtn = Instance.new("TextButton")
+SpeedBarBtn.Size = UDim2.fromScale(1, 1)
+SpeedBarBtn.BackgroundTransparency = 1
+SpeedBarBtn.Text = ""
+SpeedBarBtn.Parent = SpeedBarBg
+
+local SpeedBox = Instance.new("TextBox")
+SpeedBox.Size = UDim2.new(1, -20, 0, 28)
+SpeedBox.Position = UDim2.new(0, 10, 0, 126)
+SpeedBox.BackgroundColor3 = CONFIG.PanelColor
+SpeedBox.BorderSizePixel = 0
+SpeedBox.Text = "50"
+SpeedBox.PlaceholderText = "1 - 780"
+SpeedBox.TextColor3 = CONFIG.TextColor
+SpeedBox.Font = Enum.Font.GothamMedium
+SpeedBox.TextSize = 12
+SpeedBox.ClearTextOnFocus = false
+SpeedBox.Parent = FlyPanel
+Corner(SpeedBox, 6)
+
+local SpeedHint = Instance.new("TextLabel")
+SpeedHint.Size = UDim2.new(1, -20, 0, 16)
+SpeedHint.Position = UDim2.new(0, 10, 0, 158)
+SpeedHint.BackgroundTransparency = 1
+SpeedHint.Text = "Min 1 • Max 780 • WASD + Space + LCtrl"
+SpeedHint.TextColor3 = CONFIG.MutedText
+SpeedHint.Font = Enum.Font.Gotham
+SpeedHint.TextSize = 10
+SpeedHint.TextXAlignment = Enum.TextXAlignment.Left
+SpeedHint.Parent = FlyPanel
+
+--============================================================
+-- FLY LOGIC
+--============================================================
+local function clampSpeed(v)
+    v = tonumber(v) or 50
+    if v < CONFIG.MinFlySpeed then v = CONFIG.MinFlySpeed end
+    if v > CONFIG.MaxFlySpeed then v = CONFIG.MaxFlySpeed end
+    return v
+end
+
+local function updateSpeedUI(v)
+    State.FlySpeed = v
+    SpeedBox.Text = tostring(v)
+    SpeedTitle.Text = "KECEPATAN: " .. tostring(v)
+    SpeedBarFill.Size = UDim2.new(v / CONFIG.MaxFlySpeed, 0, 1, 0)
+end
+
+local function startFly()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    if State.FlyBV then State.FlyBV:Destroy() end
+    if State.FlyBG then State.FlyBG:Destroy() end
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "DaimHUB_FlyBV"
+    bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    bv.Velocity = Vector3.zero
+    bv.Parent = hrp
+    State.FlyBV = bv
+
+    local bg = Instance.new("BodyGyro")
+    bg.Name = "DaimHUB_FlyBG"
+    bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    bg.P = 1000
+    bg.D = 50
+    bg.CFrame = hrp.CFrame
+    bg.Parent = hrp
+    State.FlyBG = bg
+
+    hum.PlatformStand = true
+
+    if State.FlyConn then State.FlyConn:Disconnect() end
+    State.FlyConn = RunService.RenderStepped:Connect(function()
+        if not State.FlyActive then return end
+        local c = LocalPlayer.Character
+        if not c then return end
+        local r = c:FindFirstChild("HumanoidRootPart")
+        if not r or not State.FlyBV then return end
+
+        local cam = workspace.CurrentCamera
+        local move = Vector3.zero
+        local speed = State.FlySpeed
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
+
+        if move.Magnitude > 0 then
+            State.FlyBV.Velocity = move.Unit * speed
+        else
+            State.FlyBV.Velocity = Vector3.zero
+        end
+        if State.FlyBG then State.FlyBG.CFrame = cam.CFrame end
+    end)
+end
+
+local function stopFly()
+    if State.FlyConn then State.FlyConn:Disconnect() State.FlyConn = nil end
+    if State.FlyBV then State.FlyBV:Destroy() State.FlyBV = nil end
+    if State.FlyBG then State.FlyBG:Destroy() State.FlyBG = nil end
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+end
+
+local function setFly(on)
+    State.FlyActive = on
+    if on then
+        startFly()
+        TweenService:Create(FlyToggle, TweenInfo.new(0.2), {
+            BackgroundColor3 = CONFIG.AccentColor
+        }):Play()
+        TweenService:Create(FlyKnob, TweenInfo.new(0.2), {
+            Position = UDim2.new(1, -19, 0.5, -8)
+        }):Play()
+    else
+        stopFly()
+        TweenService:Create(FlyToggle, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(50, 45, 65)
+        }):Play()
+        TweenService:Create(FlyKnob, TweenInfo.new(0.2), {
+            Position = UDim2.new(0, 3, 0.5, -8)
+        }):Play()
+    end
+end
+
+-- Fly events
+FlyOpenBtn.MouseButton1Click:Connect(function()
+    FlyPanel.Visible = not FlyPanel.Visible
+end)
+FlyClose.MouseButton1Click:Connect(function() FlyPanel.Visible = false end)
+FlyToggleBtn.MouseButton1Click:Connect(function() setFly(not State.FlyActive) end)
+SpeedBox.FocusLost:Connect(function()
+    local v = clampSpeed(SpeedBox.Text)
+    updateSpeedUI(v)
+end)
+
+-- Slider drag
+do
+    local dragging = false
+    SpeedBarBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            local barAbs = SpeedBarBg.AbsolutePosition
+            local barSize = SpeedBarBg.AbsoluteSize.X
+            local ratio = math.clamp((input.Position.X - barAbs.X) / barSize, 0, 1)
+            local val = math.floor(ratio * CONFIG.MaxFlySpeed)
+            if val < CONFIG.MinFlySpeed then val = CONFIG.MinFlySpeed end
+            updateSpeedUI(val)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+-- Drag Fly Panel
+do
+    local d, ds, sp
+    FlyHeader.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            d = true; ds = input.Position; sp = FlyPanel.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if d and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - ds
+            FlyPanel.Position = UDim2.new(
+                sp.X.Scale, sp.X.Offset + delta.X,
+                sp.Y.Scale, sp.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            d = false
+        end
+    end)
+end
+
+--============================================================
+-- TOGGLE: ANTI-RAGDOLL
+--============================================================
+local function antiRagdollLoop()
+    if not State.AntiRagdoll then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    pcall(function()
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    end)
+
+    pcall(function()
+        if hum:GetState() == Enum.HumanoidStateType.Physics
+        or hum:GetState() == Enum.HumanoidStateType.FallingDown then
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+        if hum.PlatformStand then hum.PlatformStand = false end
+        if hum.Sit then hum.Sit = false end
+    end)
+
+    for _, c in ipairs(char:GetDescendants()) do
+        if c:IsA("BallSocketConstraint") or c:IsA("RopeConstraint")
+        or c:IsA("HingeConstraint") then
+            pcall(function() c:Destroy() end)
+        end
+    end
+
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if animator then
+        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+            local nm = (track.Animation and track.Animation.Name or ""):lower()
+            if nm:find("ragdoll") or nm:find("fall")
+            or nm:find("down") or nm:find("hit") or nm:find("stun") then
+                pcall(function() track:Stop() end)
+            end
+        end
+    end
+end
+
+local function setAntiRagdoll(on)
+    State.AntiRagdoll = on
+    if on then
+        if not State.AntiRagConn then
+            State.AntiRagConn = RunService.Heartbeat:Connect(antiRagdollLoop)
+        end
+    else
+        if State.AntiRagConn then State.AntiRagConn:Disconnect() State.AntiRagConn = nil end
+    end
+end
+
+MakeToggleRow(4, "🛡  ANTI-RAGDOLL", "Gak jatuh / kelenger saat di-hit", setAntiRagdoll)
+
+--============================================================
+-- TOGGLE: ANTI-HIT LORI
+--============================================================
+local function antiHitLoop()
+    if not State.AntiHit then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    if hum.Health < hum.MaxHealth then
+        pcall(function() hum.Health = hum.MaxHealth end)
+    end
+
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then
+        for _, gui in ipairs(pg:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                local nm = gui.Name:lower()
+                if nm:find("jumpscare") or nm:find("death")
+                or nm:find("gameover") then
+                    gui.Enabled = false
+                end
+            end
+        end
+    end
+
+    for _, s in ipairs(SoundService:GetDescendants()) do
+        if s:IsA("Sound") and s.Playing then
+            local nm = s.Name:lower()
+            if nm:find("scare") or nm:find("scream") or nm:find("death") then
+                pcall(function() s:Stop() end)
+            end
+        end
+    end
+end
+
+local function setAntiHit(on)
+    State.AntiHit = on
+    if on then
+        if not State.AntiHitConn then
+            State.AntiHitConn = RunService.Heartbeat:Connect(antiHitLoop)
+        end
+    else
+        if State.AntiHitConn then State.AntiHitConn:Disconnect() State.AntiHitConn = nil end
+    end
+end
+
+MakeToggleRow(5, "❤  ANTI-HIT LORI", "Health auto-restore saat kena hit", setAntiHit)
+
+--============================================================
+-- TOGGLE: NOCLIP (standalone)
+--============================================================
+local function noclipLoop()
+    if not State.NoClip then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") and p.CanCollide then
+            p.CanCollide = false
+        end
+    end
+end
+
+local function setNoClip(on)
+    State.NoClip = on
+    if on then
+        if not State.NoClipConn then
+            State.NoClipConn = RunService.Stepped:Connect(noclipLoop)
+        end
+    else
+        if State.NoClipConn then State.NoClipConn:Disconnect() State.NoClipConn = nil end
+        local char = LocalPlayer.Character
+        if char then
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") and not p.CanCollide then
+                    p.CanCollide = true
+                end
+            end
+        end
+    end
+end
+
+MakeToggleRow(6, "👻  NOCLIP", "Tembus dinding & objek", setNoClip)
+
+--============================================================
+-- NAVIGASI
+--============================================================
+CheatBtn.MouseButton1Click:Connect(function()
+    ProfilePage.Visible = false
+    CheatPage.Visible = true
+end)
+BackBtn.MouseButton1Click:Connect(function()
+    CheatPage.Visible = false
+    ProfilePage.Visible = true
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+--============================================================
+-- LOGIN FLOW
+--============================================================
+local function showStatus(text, isError)
+    StatusLbl.Text = text
+    StatusLbl.TextColor3 = isError and CONFIG.ErrorColor or CONFIG.SuccessColor
+end
+
+local function shake(inst)
+    local orig = inst.Position
+    for i = 1, 4 do
+        inst.Position = orig + UDim2.fromOffset(8, 0)
+        task.wait(0.04)
+        inst.Position = orig - UDim2.fromOffset(8, 0)
+        task.wait(0.04)
+    end
+    inst.Position = orig
+end
+
+local function runLoading(onDone)
+    LoginPage.Visible = false
+    LoadingPage.Visible = true
+
+    local steps = {
+        "Menghubungkan ke NEXORA...",
+        "Memverifikasi key...",
+        "Memuat modul Portal TV...",
+        "Memuat modul Fly...",
+        "Sinkronisasi dengan server...",
+        "Hampir selesai...",
+    }
+
+    local progress = 0
+    task.spawn(function()
+        while progress < 100 do
+            progress = math.min(100, progress + math.random(2, 7))
+            BarFill.Size = UDim2.new(progress / 100, 0, 1, 0)
+            PercentLbl.Text = tostring(progress) .. "%"
+            local idx = math.min(#steps, math.floor(progress / 18) + 1)
+            LoadStatus.Text = steps[idx]
+            task.wait(0.05 + math.random() * 0.05)
+        end
+        task.wait(0.3)
+        onDone()
+    end)
+end
+
+ConfirmBtn.MouseButton1Click:Connect(function()
+    local input = KeyBox.Text
+    if input == "" then
+        showStatus("Key tidak boleh kosong.", true)
+        shake(LoginPage)
+        return
+    end
+    if input ~= CONFIG.ValidKey then
+        showStatus("Key salah. Coba lagi.", true)
+        shake(LoginPage)
+        return
+    end
+    showStatus("Key valid!", false)
+    task.wait(0.4)
+    runLoading(function()
+        State.Authenticated = true
+        LoadingPage.Visible = false
+        MainUI.Visible = true
+        ProfilePage.Visible = true
+        CheatPage.Visible = false
+        print("[DaimHUB] Login berhasil ✅")
+        print("[DaimHUB] User:", LocalPlayer.Name)
+    end)
+end)
+
+--============================================================
+-- DRAG (Main + Login)
+--============================================================
+do
+    local function makeDrag(frame, area)
+        local d, ds, sp
+        area.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                d = true; ds = input.Position; sp = frame.Position
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if d and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - ds
+                frame.Position = UDim2.new(
+                    sp.X.Scale, sp.X.Offset + delta.X,
+                    sp.Y.Scale, sp.Y.Offset + delta.Y)
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                d = false
+            end
+        end)
+    end
+
+    makeDrag(MainUI, Header)
+    makeDrag(LoginPage, LoginTitle)
+end
+
+--============================================================
+-- STARTUP
+--============================================================
+print("============================================================")
+print("  DaimHUB v2 // ONLINE")
+print("  Architect: ZyD  |  Persona: Loy")
+print("  Target: Lori's Nightmare")
+print("============================================================")
