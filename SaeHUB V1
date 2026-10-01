@@ -1,0 +1,776 @@
+--[[
+    ██████╗  █████╗ ██╗███╗   ███╗██╗  ██╗██╗   ██╗██████╗ 
+    ██╔══██╗██╔══██╗██║████╗ ████║██║  ██║██║   ██║██╔══██╗
+    ██║  ██║███████║██║██╔████╔██║███████║██║   ██║██████╔╝
+    ██║  ██║██╔══██║██║██║╚██╔╝██║██╔══██║██║   ██║██╔══██╗
+    ██████╔╝██║  ██║██║██║ ╚═╝ ██║██║  ██║╚██████╔╝██████╔╝
+    ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ 
+        DaimHUB — STEAL A EGG // v1.2
+        Architect: ZyD | Persona: Loy
+        Fitur: Anti-Hit Guardian + Remote Scanner
+--]]
+
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local CoreGui          = game:GetService("CoreGui")
+local RS               = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+--============================================================
+-- CONFIG
+--============================================================
+local CFG = {
+    Title        = "DaimHUB",
+    Game         = "Steal a Egg",
+    Accent1      = Color3.fromRGB(255, 200, 80),
+    Accent2      = Color3.fromRGB(255, 140, 40),
+    Accent3      = Color3.fromRGB(230, 80, 20),
+    Bg1          = Color3.fromRGB(25, 15, 8),
+    Bg2          = Color3.fromRGB(40, 25, 12),
+    Bg3          = Color3.fromRGB(15, 8, 4),
+    Panel1       = Color3.fromRGB(35, 22, 12),
+    Panel2       = Color3.fromRGB(50, 32, 18),
+    TextColor    = Color3.fromRGB(255, 245, 220),
+    MutedText    = Color3.fromRGB(180, 150, 100),
+    Success      = Color3.fromRGB(80, 220, 120),
+    Error        = Color3.fromRGB(255, 70, 70),
+    Highlight    = Color3.fromRGB(80, 220, 255),
+    ScanInterval  = 0.5,
+    TouchInterval = 0.15,
+    HealthInterval = 0.1,
+}
+
+--============================================================
+-- STATE
+--============================================================
+local S = {
+    GuardOn       = false,
+    Frozen        = {},
+    LoopConn      = nil,
+    LastScan      = 0,
+    LastTouch     = 0,
+    LastHealth    = 0,
+    LockedHealth  = nil,
+    BlockedRemotes = {},
+    RemoteHookConn = nil,
+}
+
+--============================================================
+-- HELPERS
+--============================================================
+local function round(inst, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 10)
+    c.Parent = inst
+    return c
+end
+
+local function stroke(inst, color, thick, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color or CFG.Accent2
+    s.Thickness = thick or 1.5
+    s.Transparency = transparency or 0
+    s.Parent = inst
+    return s
+end
+
+local function gradient(inst, c1, c2, c3, rotation)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, c1),
+        ColorSequenceKeypoint.new(0.50, c2 or c1),
+        ColorSequenceKeypoint.new(1.00, c3 or c2 or c1),
+    })
+    g.Rotation = rotation or 45
+    g.Parent = inst
+    return g
+end
+
+local function rainbowGradient(inst)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 100, 100)),
+        ColorSequenceKeypoint.new(0.20, Color3.fromRGB(255, 200, 80)),
+        ColorSequenceKeypoint.new(0.40, Color3.fromRGB(100, 255, 120)),
+        ColorSequenceKeypoint.new(0.60, Color3.fromRGB(100, 200, 255)),
+        ColorSequenceKeypoint.new(0.80, Color3.fromRGB(200, 120, 255)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 100, 100)),
+    })
+    g.Rotation = 0
+    g.Parent = inst
+    task.spawn(function()
+        local rot = 0
+        while g.Parent and g.Parent.Parent do
+            rot = (rot + 2) % 360
+            pcall(function() g.Rotation = rot end)
+            task.wait(0.03)
+        end
+    end)
+    return g
+end
+
+--============================================================
+-- GUI PARENT
+--============================================================
+local function getParent()
+    if gethui then
+        local ok, h = pcall(gethui)
+        if ok and h then return h end
+    end
+    if syn and syn.protect_gui then
+        local g = Instance.new("ScreenGui")
+        pcall(function() syn.protect_gui(g) end)
+        return g
+    end
+    local ok, pg = pcall(function() return LocalPlayer:WaitForChild("PlayerGui", 3) end)
+    if ok and pg then return pg end
+    return CoreGui
+end
+
+local parent = getParent()
+for _, v in pairs(parent:GetChildren()) do
+    if v.Name == "DaimHUB_GUI" then pcall(function() v:Destroy() end) end
+end
+
+local GUI = Instance.new("ScreenGui")
+GUI.Name           = "DaimHUB_GUI"
+GUI.ResetOnSpawn   = false
+GUI.IgnoreGuiInset = true
+GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+GUI.DisplayOrder   = 999
+pcall(function() GUI.Parent = parent end)
+if not GUI.Parent then GUI.Parent = CoreGui end
+
+--============================================================
+-- FLOATING ICON
+--============================================================
+local Icon = Instance.new("TextButton")
+Icon.Name             = "DaimIcon"
+Icon.Size             = UDim2.fromOffset(70, 70)
+Icon.Position         = UDim2.new(0.5, -35, 0.5, -35)
+Icon.BackgroundColor3 = CFG.Bg1
+Icon.Text             = "DaimHUB"
+Icon.TextColor3       = CFG.Accent1
+Icon.Font             = Enum.Font.GothamBlack
+Icon.TextSize         = 12
+Icon.AutoButtonColor  = false
+Icon.Active           = true
+Icon.Draggable        = true
+Icon.Visible          = true
+Icon.Parent           = GUI
+round(Icon, 35)
+local iconStroke = stroke(Icon, CFG.Accent1, 3)
+gradient(Icon, CFG.Bg1, CFG.Bg2, CFG.Bg3, 135)
+
+task.spawn(function()
+    while iconStroke.Parent do
+        TweenService:Create(iconStroke, TweenInfo.new(1.2), {Transparency = 0.7}):Play()
+        task.wait(1.2)
+        TweenService:Create(iconStroke, TweenInfo.new(1.2), {Transparency = 0}):Play()
+        task.wait(1.2)
+    end
+end)
+
+--============================================================
+-- MAIN PANEL
+--============================================================
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(300, 340)
+Main.Position = UDim2.new(1, -320, 0.5, -170)
+Main.BackgroundColor3 = CFG.Panel1
+Main.BorderSizePixel = 0
+Main.Visible = false
+Main.ZIndex = 5
+Main.Parent = GUI
+round(Main, 16)
+stroke(Main, CFG.Accent1, 2)
+gradient(Main, CFG.Panel1, CFG.Panel2, CFG.Bg3, 135)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 46)
+Header.BackgroundColor3 = CFG.Bg1
+Header.BorderSizePixel = 0
+Header.Parent = Main
+round(Header, 16)
+stroke(Header, CFG.Accent2, 1, 0.3)
+
+local HeaderFix = Instance.new("Frame")
+HeaderFix.Size = UDim2.new(1, 0, 0, 12)
+HeaderFix.Position = UDim2.new(0, 0, 1, -12)
+HeaderFix.BackgroundColor3 = CFG.Bg1
+HeaderFix.BorderSizePixel = 0
+HeaderFix.Parent = Header
+
+local HeaderLine = Instance.new("Frame")
+HeaderLine.Size = UDim2.new(1, 0, 0, 2)
+HeaderLine.Position = UDim2.new(0, 0, 1, -2)
+HeaderLine.BackgroundColor3 = CFG.Accent1
+HeaderLine.BorderSizePixel = 0
+HeaderLine.Parent = Header
+rainbowGradient(HeaderLine)
+
+local HTitle = Instance.new("TextLabel")
+HTitle.Size = UDim2.new(1, -60, 1, 0)
+HTitle.Position = UDim2.new(0, 16, 0, 0)
+HTitle.BackgroundTransparency = 1
+HTitle.Text = "⚡ " .. CFG.Title .. " v1.2"
+HTitle.TextColor3 = CFG.Accent1
+HTitle.Font = Enum.Font.GothamBlack
+HTitle.TextSize = 16
+HTitle.TextXAlignment = Enum.TextXAlignment.Left
+HTitle.Parent = Header
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.fromOffset(28, 28)
+CloseBtn.Position = UDim2.new(1, -36, 0, 9)
+CloseBtn.BackgroundColor3 = CFG.Error
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.Font = Enum.Font.GothamBlack
+CloseBtn.TextSize = 18
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = Header
+round(CloseBtn, 8)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -24, 1, -66)
+Content.Position = UDim2.new(0, 12, 0, 54)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+--============================================================
+-- PAGE 1: INFO
+--============================================================
+local PageInfo = Instance.new("Frame")
+PageInfo.Size = UDim2.fromScale(1, 1)
+PageInfo.BackgroundTransparency = 1
+PageInfo.Parent = Content
+
+local function MakeInfoBox(yPos, label, value, valueColor)
+    local box = Instance.new("Frame")
+    box.Size = UDim2.new(1, 0, 0, 55)
+    box.Position = UDim2.new(0, 0, 0, yPos)
+    box.BackgroundColor3 = CFG.Bg1
+    box.BorderSizePixel = 0
+    box.Parent = PageInfo
+    round(box, 10)
+    stroke(box, CFG.Accent3, 1, 0.5)
+    gradient(box, CFG.Bg1, CFG.Bg2, CFG.Bg3, 90)
+
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.new(0, 4, 1, -14)
+    accent.Position = UDim2.new(0, 5, 0, 7)
+    accent.BackgroundColor3 = CFG.Accent1
+    accent.BorderSizePixel = 0
+    accent.Parent = box
+    round(accent, 2)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -30, 0, 16)
+    lbl.Position = UDim2.new(0, 18, 0, 6)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.TextColor3 = CFG.MutedText
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 10
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = box
+
+    local val = Instance.new("TextLabel")
+    val.Size = UDim2.new(1, -30, 0, 24)
+    val.Position = UDim2.new(0, 18, 0, 24)
+    val.BackgroundTransparency = 1
+    val.Text = value
+    val.TextColor3 = valueColor or CFG.TextColor
+    val.Font = Enum.Font.GothamBlack
+    val.TextSize = 15
+    val.TextXAlignment = Enum.TextXAlignment.Left
+    val.Parent = box
+end
+
+MakeInfoBox(10, "NAMA AKUN", LocalPlayer.Name, CFG.Accent1)
+MakeInfoBox(75, "GAME", CFG.Game, CFG.Accent2)
+
+local FiturBtn = Instance.new("TextButton")
+FiturBtn.Size = UDim2.new(1, 0, 0, 52)
+FiturBtn.Position = UDim2.new(0, 0, 0, 150)
+FiturBtn.BackgroundColor3 = CFG.Accent2
+FiturBtn.BorderSizePixel = 0
+FiturBtn.Text = "🎯  BUKA FITUR"
+FiturBtn.TextColor3 = CFG.Bg1
+FiturBtn.Font = Enum.Font.GothamBlack
+FiturBtn.TextSize = 15
+FiturBtn.AutoButtonColor = false
+FiturBtn.Parent = PageInfo
+round(FiturBtn, 12)
+stroke(FiturBtn, CFG.Accent1, 2)
+rainbowGradient(FiturBtn)
+
+--============================================================
+-- PAGE 2: FITUR
+--============================================================
+local PageFitur = Instance.new("Frame")
+PageFitur.Size = UDim2.fromScale(1, 1)
+PageFitur.BackgroundTransparency = 1
+PageFitur.Visible = false
+PageFitur.Parent = Content
+
+local FLayout = Instance.new("UIListLayout")
+FLayout.Padding = UDim.new(0, 8)
+FLayout.SortOrder = Enum.SortOrder.LayoutOrder
+FLayout.Parent = PageFitur
+
+local BackBtn = Instance.new("TextButton")
+BackBtn.Size = UDim2.fromOffset(70, 28)
+BackBtn.BackgroundColor3 = CFG.Bg2
+BackBtn.BorderSizePixel = 0
+BackBtn.Text = "‹ BACK"
+BackBtn.TextColor3 = CFG.Accent1
+BackBtn.Font = Enum.Font.GothamBold
+BackBtn.TextSize = 11
+BackBtn.LayoutOrder = 0
+BackBtn.Parent = PageFitur
+round(BackBtn, 8)
+stroke(BackBtn, CFG.Accent3, 1, 0.5)
+
+--============================================================
+-- DETEKSI UNIVERSAL
+--============================================================
+local function isNPC(obj)
+    if not obj or not obj:IsA("Model") then return false end
+    if obj == LocalPlayer.Character then return false end
+    if Players:GetPlayerFromCharacter(obj) then return false end
+    local hum = obj:FindFirstChildOfClass("Humanoid")
+    local hrp = obj:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return false end
+    if hum.Health <= 0 then return false end
+    return true
+end
+
+--============================================================
+-- FREEZE NPC
+--============================================================
+local function freezeNPC(model)
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    
+    if hum then
+        pcall(function()
+            hum.WalkSpeed = 0
+            hum.JumpPower = 0
+            hum.JumpHeight = 0
+            hum.AutoRotate = false
+            hum.PlatformStand = false
+        end)
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                pcall(function() track:Stop() end)
+            end
+        end
+    end
+    
+    if hrp then
+        pcall(function() hrp.Anchored = true end)
+    end
+    
+    for _, c in ipairs(model:GetDescendants()) do
+        if c:IsA("BodyVelocity") or c:IsA("BodyGyro")
+        or c:IsA("AlignPosition") or c:IsA("AlignOrientation")
+        or c:IsA("LinearVelocity") or c:IsA("VectorForce")
+        or c:IsA("BodyForce") or c:IsA("BodyThrust") then
+            pcall(function() c:Destroy() end)
+        end
+    end
+    
+    for _, d in ipairs(model:GetDescendants()) do
+        if d:IsA("Script") or d:IsA("LocalScript") then
+            pcall(function() d.Disabled = true end)
+        end
+    end
+    
+    for _, d in ipairs(model:GetDescendants()) do
+        if d:IsA("BasePart") then
+            pcall(function()
+                d.CanTouch = false
+                d.CanQuery = false
+            end)
+        end
+    end
+    
+    for _, d in ipairs(model:GetDescendants()) do
+        if d:IsA("Tool") then
+            pcall(function() d.Parent = nil end)
+        end
+    end
+    
+    if not model:FindFirstChild("DaimGuard_HL") then
+        local h = Instance.new("Highlight")
+        h.Name = "DaimGuard_HL"
+        h.FillColor = CFG.Highlight
+        h.OutlineColor = Color3.fromRGB(255, 255, 255)
+        h.FillTransparency = 0.75
+        h.OutlineTransparency = 0.3
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.Parent = model
+    end
+    
+    S.Frozen[model] = true
+end
+
+local function reFreeze(model)
+    if not model or not model.Parent then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            if hum.WalkSpeed ~= 0 then hum.WalkSpeed = 0 end
+            if hum.JumpPower ~= 0 then hum.JumpPower = 0 end
+        end)
+    end
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    if hrp and not hrp.Anchored then
+        pcall(function() hrp.Anchored = true end)
+    end
+end
+
+local function scanAndFreeze()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and isNPC(obj) then
+            if not S.Frozen[obj] then
+                freezeNPC(obj)
+                print("[DaimHUB] ❄️ Frozen:", obj.Name)
+            else
+                reFreeze(obj)
+            end
+        end
+    end
+end
+
+--============================================================
+-- BLOCK TOUCH
+--============================================================
+local function blockDamageTouch()
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, d in ipairs(workspace:GetDescendants()) do
+        if d:IsA("BasePart") and not d:IsDescendantOf(char) then
+            local n = d.Name:lower()
+            local isDamage = n:find("hit") or n:find("damage") 
+                or n:find("kill") or n:find("punch") 
+                or n:find("bite") or n:find("mouth") 
+                or n:find("teeth") or n:find("attack")
+                or n:find("touch") or n:find("hurt")
+                or n:find("harm") or n:find("spike")
+                or n:find("trap")
+            
+            local pm = d:FindFirstAncestorOfClass("Model")
+            local isFromNPC = pm and pm:FindFirstChildOfClass("Humanoid")
+                and not Players:GetPlayerFromCharacter(pm)
+            
+            if (isDamage or isFromNPC) and d.CanTouch then
+                pcall(function()
+                    d.CanTouch = false
+                    d.CanQuery = false
+                end)
+            end
+        end
+    end
+end
+
+--============================================================
+-- HEALTH LOCK
+--============================================================
+local function healthLock()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if not S.LockedHealth or S.LockedHealth < hum.MaxHealth then
+        S.LockedHealth = hum.MaxHealth
+    end
+    if hum.Health < S.LockedHealth then
+        pcall(function() hum.Health = S.LockedHealth end)
+    end
+end
+
+--============================================================
+-- ANTI-RAGDOLL
+--============================================================
+local function antiRagdoll()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    pcall(function()
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        local st = hum:GetState()
+        if st == Enum.HumanoidStateType.Physics
+        or st == Enum.HumanoidStateType.FallingDown
+        or st == Enum.HumanoidStateType.Ragdoll then
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+        if hum.PlatformStand then hum.PlatformStand = false end
+        if hum.Sit then hum.Sit = false end
+    end)
+end
+
+--============================================================
+-- REMOTE SCANNER + BLOCK
+--============================================================
+local DMG_KEYWORDS = {
+    "damage", "hit", "attack", "hurt", "kill", "death",
+    "punch", "bite", "grab", "combat", "fight", "health"
+}
+
+local function nameMatchRemote(name, kws)
+    if not name then return false end
+    local n = name:lower()
+    for _, k in ipairs(kws) do
+        if n:find(k, 1, true) then return true end
+    end
+    return false
+end
+
+local function scanAndBlockRemotes()
+    local count = 0
+    for _, obj in ipairs(RS:GetDescendants()) do
+        if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction"))
+        and not S.BlockedRemotes[obj] then
+            if nameMatchRemote(obj.Name, DMG_KEYWORDS) then
+                if obj:IsA("RemoteEvent") then
+                    pcall(function()
+                        obj.OnClientEvent:Connect(function() end)
+                    end)
+                end
+                S.BlockedRemotes[obj] = true
+                count = count + 1
+                print("[DaimHUB] 🚫 Blocked remote:", obj.Name)
+            end
+        end
+    end
+    if count > 0 then
+        print("[DaimHUB] Total blocked remotes:", count)
+    end
+end
+
+local function unblockRemotes()
+    S.BlockedRemotes = {}
+end
+
+--============================================================
+-- TOGGLE HELPER
+--============================================================
+local function MakeToggle(order, icon, title, desc, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -6, 0, 64)
+    row.BackgroundColor3 = CFG.Bg1
+    row.BorderSizePixel = 0
+    row.LayoutOrder = order
+    row.Parent = PageFitur
+    round(row, 12)
+    stroke(row, CFG.Accent3, 1, 0.4)
+    gradient(row, CFG.Bg1, CFG.Bg2, CFG.Bg3, 90)
+
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.new(0, 4, 1, -16)
+    accent.Position = UDim2.new(0, 5, 0, 8)
+    accent.BackgroundColor3 = CFG.Accent2
+    accent.BorderSizePixel = 0
+    accent.Parent = row
+    round(accent, 2)
+
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Size = UDim2.fromOffset(36, 36)
+    iconLbl.Position = UDim2.new(0, 16, 0.5, -18)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.Text = icon or "◆"
+    iconLbl.TextColor3 = CFG.Accent1
+    iconLbl.Font = Enum.Font.GothamBlack
+    iconLbl.TextSize = 22
+    iconLbl.Parent = row
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -140, 0, 22)
+    lbl.Position = UDim2.new(0, 58, 0, 12)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = CFG.TextColor
+    lbl.Font = Enum.Font.GothamBlack
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local dsc = Instance.new("TextLabel")
+    dsc.Size = UDim2.new(1, -140, 0, 14)
+    dsc.Position = UDim2.new(0, 58, 0, 36)
+    dsc.BackgroundTransparency = 1
+    dsc.Text = desc
+    dsc.TextColor3 = CFG.MutedText
+    dsc.Font = Enum.Font.Gotham
+    dsc.TextSize = 10
+    dsc.TextXAlignment = Enum.TextXAlignment.Left
+    dsc.Parent = row
+
+    local tog = Instance.new("Frame")
+    tog.Size = UDim2.fromOffset(48, 24)
+    tog.Position = UDim2.new(1, -62, 0.5, -12)
+    tog.BackgroundColor3 = CFG.Bg3
+    tog.BorderSizePixel = 0
+    tog.Parent = row
+    round(tog, 12)
+    local togStroke = stroke(tog, CFG.Accent3, 1, 0.4)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(18, 18)
+    knob.Position = UDim2.new(0, 3, 0.5, -9)
+    knob.BackgroundColor3 = CFG.TextColor
+    knob.BorderSizePixel = 0
+    knob.Parent = tog
+    round(knob, 9)
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(1, 1)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = row
+
+    local on = false
+    btn.MouseButton1Click:Connect(function()
+        on = not on
+        TweenService:Create(tog, TweenInfo.new(0.25), {
+            BackgroundColor3 = on and CFG.Accent2 or CFG.Bg3
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.25), {
+            Position = on and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9),
+            BackgroundColor3 = on and CFG.Bg1 or CFG.TextColor
+        }):Play()
+        togStroke.Color = on and CFG.Accent1 or CFG.Accent3
+        togStroke.Transparency = on and 0 or 0.4
+        if callback then pcall(callback, on) end
+    end)
+end
+
+--============================================================
+-- MAIN FITUR: ANTI-HIT GUARDIAN (4-Layer + Remote Block)
+--============================================================
+local function setGuard(on)
+    S.GuardOn = on
+    if on then
+        print("[DaimHUB] 🛡️ Anti-Hit Guardian v1.2: ON")
+        S.LockedHealth = nil
+        scanAndFreeze()
+        scanAndBlockRemotes()
+        
+        if not S.LoopConn then
+            S.LoopConn = RunService.Heartbeat:Connect(function()
+                if not S.GuardOn then return end
+                local now = tick()
+                
+                if now - S.LastScan >= CFG.ScanInterval then
+                    S.LastScan = now
+                    pcall(scanAndFreeze)
+                end
+                if now - S.LastTouch >= CFG.TouchInterval then
+                    S.LastTouch = now
+                    pcall(blockDamageTouch)
+                end
+                if now - S.LastHealth >= CFG.HealthInterval then
+                    S.LastHealth = now
+                    pcall(healthLock)
+                    pcall(scanAndBlockRemotes)
+                end
+                pcall(antiRagdoll)
+            end)
+        end
+    else
+        print("[DaimHUB] ⛔ Anti-Hit Guardian: OFF")
+        if S.LoopConn then
+            S.LoopConn:Disconnect()
+            S.LoopConn = nil
+        end
+        for model, _ in pairs(S.Frozen) do
+            if model and model.Parent then
+                local hum = model:FindFirstChildOfClass("Humanoid")
+                local hrp = model:FindFirstChild("HumanoidRootPart")
+                if hum then
+                    pcall(function()
+                        hum.WalkSpeed = 16
+                        hum.JumpPower = 50
+                        hum.AutoRotate = true
+                    end)
+                end
+                if hrp then pcall(function() hrp.Anchored = false end) end
+                local hl = model:FindFirstChild("DaimGuard_HL")
+                if hl then pcall(function() hl:Destroy() end) end
+            end
+        end
+        S.Frozen = {}
+        S.LockedHealth = nil
+        unblockRemotes()
+    end
+end
+
+MakeToggle(1, "🛡️", "ANTI-HIT GUARDIAN", "4-Layer + Remote Block", setGuard)
+
+--============================================================
+-- NAVIGATION
+--============================================================
+Icon.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+    if Main.Visible then
+        Main.Size = UDim2.fromOffset(0, 0)
+        TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.fromOffset(300, 340)
+        }):Play()
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function() Main.Visible = false end)
+FiturBtn.MouseButton1Click:Connect(function()
+    PageInfo.Visible = false
+    PageFitur.Visible = true
+end)
+BackBtn.MouseButton1Click:Connect(function()
+    PageFitur.Visible = false
+    PageInfo.Visible = true
+end)
+
+--============================================================
+-- DRAG
+--============================================================
+do
+    local d, ds, sp
+    Header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            d = true; ds = input.Position; sp = Main.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if d and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - ds
+            Main.Position = UDim2.new(sp.X.Scale, sp.X.Offset + delta.X,
+                sp.Y.Scale, sp.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then d = false end
+    end)
+end
+
+--============================================================
+-- STARTUP
+--============================================================
+print("============================================================")
+print("  DAIMHUB — STEAL A EGG // v1.2")
+print("  Architect: ZyD | Persona: Loy")
+print("  Fitur: Anti-Hit Guardian (4-Layer + Remote Block)")
+print("  Klik icon DaimHUB untuk buka menu")
+print("============================================================)
